@@ -10,6 +10,7 @@ from routes.alerts import alerts_bp
 from routes.dashboard import dashboard_bp
 from routes.camera import camera_bp
 from routes.logs import logs_bp
+from routes.blacklist import blacklist_bp
 
 app = Flask(__name__)
 app.secret_key = 'hostel_surveillance_secret_change_in_production'
@@ -25,6 +26,7 @@ app.register_blueprint(alerts_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(camera_bp)
 app.register_blueprint(logs_bp)
+app.register_blueprint(blacklist_bp)
 
 @app.route('/')
 def index(): return redirect('/login')
@@ -49,6 +51,9 @@ def attendance_page(): return render_template('base.html')
 
 @app.route('/logs')
 def logs_page(): return render_template('base.html')
+
+@app.route('/blacklist')
+def blacklist_page(): return render_template('base.html')
 
 if __name__ == '__main__':
     app.run(debug=False, threaded=True, host='0.0.0.0', port=5000)

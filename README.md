@@ -77,3 +77,5 @@ hostel_surveillance/
 ├── static/             # CSS + JS
 └── data/               # Face images (gitignored)
 ```
+Admin =  admin   and   admin123
+Warden = warden1   and NewWardenPass123

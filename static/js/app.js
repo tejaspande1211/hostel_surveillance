@@ -19,20 +19,34 @@ function isActive(path) { return window.location.pathname === path ? 'active' : 
 
 function buildSidebar(role) {
     const sidebar = document.getElementById('sidebar');
-    const links = role === 'admin' ? `
+    const normalizedRole = (role || '').toLowerCase();
+
+    let links = `
+        <div class="section-label">Main</div>
+        <a href="/dashboard" class="${isActive('/dashboard')}"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a>`;
+
+    if (normalizedRole === 'admin') {
+        links += `
         <div class="section-label">Admin</div>
-        <a href="/dashboard" class="${isActive('/dashboard')}"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a>
         <a href="/students" class="${isActive('/students')}"><i class="fas fa-users me-2"></i>Students</a>
         <a href="/camera" class="${isActive('/camera')}"><i class="fas fa-video me-2"></i>Live Camera</a>
         <a href="/alerts" class="${isActive('/alerts')}"><i class="fas fa-bell me-2"></i>Alerts</a>
-        <a href="/logs" class="${isActive('/logs')}"><i class="fas fa-list me-2"></i>Logs</a>` : `
-        <div class="section-label">Main</div>
-        <a href="/dashboard" class="${isActive('/dashboard')}"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a>
-        <div class="section-label">Manage</div>
+        <a href="/logs" class="${isActive('/logs')}"><i class="fas fa-list me-2"></i>Logs</a>
+        <a href="/blacklist" class="${isActive('/blacklist')}"><i class="fas fa-user-slash me-2"></i>Blacklist</a>`;
+    } else if (normalizedRole === 'warden') {
+        links += `
+        <div class="section-label">Warden</div>
         <a href="/students" class="${isActive('/students')}"><i class="fas fa-users me-2"></i>Students</a>
         <a href="/attendance" class="${isActive('/attendance')}"><i class="fas fa-calendar-check me-2"></i>Attendance</a>
         <a href="/camera" class="${isActive('/camera')}"><i class="fas fa-video me-2"></i>Live Camera</a>
         <a href="/alerts" class="${isActive('/alerts')}"><i class="fas fa-bell me-2"></i>Alerts</a>`;
+    } else {
+        // default for unknown roles: limited access
+        links += `
+        <div class="section-label">Explore</div>
+        <a href="/students" class="${isActive('/students')}"><i class="fas fa-users me-2"></i>Students</a>`;
+    }
+
     sidebar.innerHTML = links;
 }
 
@@ -254,6 +268,81 @@ async function loadAlerts() {
 async function ackAlert(id) {
     await fetch('/api/alerts/'+id+'/ack', { method:'POST' });
     await loadAlerts();
+}
+
+async function loadBlacklist() {
+    const user = await checkAuth();
+    if (!user) return;
+    buildSidebar(user.role);
+    document.getElementById('main-content').innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="fw-bold mb-0">Blacklisted Persons</h5>
+            <button class="btn btn-primary btn-sm" onclick="showAddBlacklist()"><i class="fas fa-plus me-1"></i>Add Person</button>
+        </div>
+        <div id="blacklist-form" class="card border-0 shadow-sm mb-4 d-none">
+            <div class="card-header bg-white fw-bold">Add Blacklisted Person</div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-4"><input class="form-control" id="b-name" placeholder="Full Name"></div>
+                    <div class="col-md-4"><input class="form-control" id="b-reason" placeholder="Reason"></div>
+                    <div class="col-md-4"><input type="file" class="form-control" id="b-image" accept="image/*"></div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-success btn-sm" onclick="submitBlacklist()">Save</button>
+                    <button class="btn btn-secondary btn-sm ms-2" onclick="document.getElementById('blacklist-form').classList.add('d-none')">Cancel</button>
+                </div>
+            </div>
+        </div>
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light"><tr><th>Name</th><th>Reason</th><th>Added On</th><th>Actions</th></tr></thead>
+                    <tbody id="blacklist-table"></tbody>
+                </table>
+            </div>
+        </div>`;
+    await refreshBlacklist();
+}
+
+function showAddBlacklist() { document.getElementById('blacklist-form').classList.remove('d-none'); }
+
+async function submitBlacklist() {
+    const name = document.getElementById('b-name').value;
+    const reason = document.getElementById('b-reason').value;
+    const imageInput = document.getElementById('b-image');
+    if (!name || !reason || !imageInput.files.length) { alert('Name, reason and photo required'); return; }
+
+    const form = new FormData();
+    form.append('name', name);
+    form.append('reason', reason);
+    form.append('image', imageInput.files[0]);
+
+    const res = await fetch('/api/blacklist', { method:'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Failed to add blacklisted person'); return; }
+    document.getElementById('blacklist-form').classList.add('d-none');
+    await refreshBlacklist();
+}
+
+async function refreshBlacklist() {
+    const list = await api('/api/blacklist');
+    document.getElementById('blacklist-table').innerHTML = list.length
+        ? list.map(item => `
+            <tr>
+                <td>${item.name}</td>
+                <td>${item.reason}</td>
+                <td>${new Date(item.created_at).toLocaleString()}</td>
+                <td>
+                    <button class="btn btn-outline-danger btn-sm" onclick="deleteBlacklist(${item.id})">Delete</button>
+                </td>
+            </tr>`).join('')
+        : '<tr><td colspan="4" class="text-center text-muted py-3">No blacklisted persons</td></tr>';
+}
+
+async function deleteBlacklist(id) {
+    if (!confirm('Delete this blacklisted person?')) return;
+    await fetch('/api/blacklist/' + id, { method: 'DELETE' });
+    await refreshBlacklist();
 }
 
 async function loadAttendance() {

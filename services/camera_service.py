@@ -60,6 +60,10 @@ class CameraService:
             cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
         return frame
 
+    def reload_embeddings(self):
+        self.recognizer.load_embeddings_from_db()
+        print('[CameraService] Embeddings reloaded')
+
     def _capture_loop(self):
         last_process_time = 0
         while self.running:
@@ -104,11 +108,19 @@ class CameraService:
 
         # Route to correct service
         if ptype == 'student':
-            self.attendance_svc.mark_attendance(pid)
+            student = self.db.fetch_one('SELECT * FROM students WHERE id=? AND is_active=1', (pid,))
+            if student:
+                self.attendance_svc.mark_attendance(pid)
+            else:
+                print(f'[Recognition] student id={pid} not active or not found, skipping attendance')
         elif ptype == 'blacklisted':
-            frame = self.get_frame()
-            if frame is not None:
-                self.alert_svc.send_blacklist_alert(pid, frame)
+            person = self.db.fetch_one('SELECT * FROM blacklisted_persons WHERE id=?', (pid,))
+            if person:
+                frame = self.get_frame()
+                if frame is not None:
+                    self.alert_svc.send_blacklist_alert(pid, frame)
+            else:
+                print(f'[Recognition] blacklisted id={pid} not found; ignoring')
         elif ptype == 'unknown':
             frame = self.get_frame()
             if frame is not None:

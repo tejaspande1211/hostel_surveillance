@@ -3,6 +3,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from flask import Blueprint, request, jsonify, session
 from db.db_manager import DatabaseManager
 from services.face_recognizer import FaceRecognizer
+import routes.camera as camera_route
 from functools import wraps
 
 blacklist_bp = Blueprint('blacklist', __name__)
@@ -53,10 +54,34 @@ def add_blacklisted_person():
 
         # Update blacklisted_persons row with path once saved
         db.execute('UPDATE blacklisted_persons SET image_path=? WHERE id=?', (image_path, person_id))
+        if camera_route.camera_service is not None:
+            camera_route.camera_service.reload_embeddings()
 
         return jsonify({'message': 'Person blacklisted', 'id': person_id}), 201
 
     except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@blacklist_bp.route('/api/blacklist/<int:pid>/face', methods=['POST'])
+@login_required
+def upload_blacklist_face(pid):
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+    file = request.files['image']
+    save_dir = os.path.join('data', 'known_faces', 'blacklisted', str(pid))
+    os.makedirs(save_dir, exist_ok=True)
+    image_path = os.path.join(save_dir, 'face.jpg')
+    file.save(image_path)
+    try:
+        recognizer = FaceRecognizer()
+        db.execute('DELETE FROM face_embeddings WHERE person_type=? AND person_id=?', ('blacklisted', pid))
+        recognizer.add_face('blacklisted', pid, image_path)
+        db.execute('UPDATE blacklisted_persons SET image_path=? WHERE id=?', (image_path, pid))
+        if camera_route.camera_service is not None:
+            camera_route.camera_service.reload_embeddings()
+        return jsonify({'message': 'Face registered successfully'})
+    except ValueError as e:
         return jsonify({'error': str(e)}), 400
 
 
@@ -76,4 +101,8 @@ def remove_blacklisted_person(pid):
             os.rmdir(folder)
     except Exception:
         pass
+
+    if camera_route.camera_service is not None:
+        camera_route.camera_service.reload_embeddings()
+
     return jsonify({'message': 'Person removed from blacklist'})

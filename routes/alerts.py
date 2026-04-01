@@ -18,7 +18,13 @@ def login_required(f):
 @alerts_bp.route('/api/alerts', methods=['GET'])
 @login_required
 def get_alerts():
-    alerts = db.fetch_all('SELECT * FROM alerts ORDER BY timestamp DESC LIMIT 50')
+    alerts = db.fetch_all('''
+        SELECT al.*, s.name AS student_name, b.name AS blacklist_name
+        FROM alerts al
+        LEFT JOIN students s ON al.person_type='student' AND al.person_id=s.id
+        LEFT JOIN blacklisted_persons b ON al.person_type='blacklisted' AND al.person_id=b.id
+        ORDER BY al.timestamp DESC LIMIT 50
+    ''')
     return jsonify([dict(a) for a in alerts])
 
 @alerts_bp.route('/api/alerts/<int:aid>/ack', methods=['POST'])

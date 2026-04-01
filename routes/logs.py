@@ -19,5 +19,11 @@ def login_required(f):
 @login_required
 def get_logs():
     limit = request.args.get('limit', 50)
-    logs = db.fetch_all('SELECT * FROM recognition_logs ORDER BY timestamp DESC LIMIT ?', (limit,))
+    logs = db.fetch_all('''
+        SELECT rl.*, s.name AS student_name, b.name AS blacklist_name
+        FROM recognition_logs rl
+        LEFT JOIN students s ON rl.person_type='student' AND rl.person_id=s.id
+        LEFT JOIN blacklisted_persons b ON rl.person_type='blacklisted' AND rl.person_id=b.id
+        ORDER BY rl.timestamp DESC LIMIT ?
+    ''', (limit,))
     return jsonify([dict(l) for l in logs])

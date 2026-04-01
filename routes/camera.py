@@ -32,6 +32,17 @@ def generate_frames():
 def stream():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@camera_bp.route('/api/camera/capture')
+@login_required
+def capture():
+    if camera_service is None:
+        return jsonify({'error': 'Camera service not available'}), 503
+    frame = camera_service.get_frame()
+    if frame is None:
+        return jsonify({'error': 'No camera frame available'}), 503
+    _, buffer = cv2.imencode('.jpg', frame)
+    return Response(buffer.tobytes(), mimetype='image/jpeg')
+
 @camera_bp.route('/api/camera/status')
 @login_required
 def status():

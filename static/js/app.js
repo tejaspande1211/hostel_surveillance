@@ -50,6 +50,109 @@ function buildSidebar(role) {
     sidebar.innerHTML = links;
 }
 
+let webcamState = {
+    stream: null,
+    target: null,
+    capturedBlob: null,
+    captureSid: null
+};
+
+function openWebcam(target, sid = null) {
+    webcamState.target = target;
+    webcamState.captureSid = sid;
+    const wrapper = document.getElementById(target + '-camera-wrapper');
+    const preview = document.getElementById(target + '-preview');
+    const captureBtn = document.getElementById(target + '-capture-btn');
+    const closeBtn = document.getElementById(target + '-close-btn');
+
+    if (!wrapper || !preview || !captureBtn || !closeBtn) return;
+
+    fetch('/api/camera/capture')
+        .then(res => {
+            if (!res.ok) throw new Error('Unable to capture from live camera');
+            return res.blob();
+        })
+        .then(blob => {
+            webcamState.capturedBlob = blob;
+            const url = URL.createObjectURL(blob);
+            preview.src = url;
+            wrapper.classList.remove('d-none');
+            captureBtn.disabled = false;
+            closeBtn.style.display = 'inline-block';
+            if (sid) {
+                // immediate upload for existing row identity
+                const form = new FormData();
+                form.append('image', blob, 'capture.jpg');
+                return fetch(`/api/${target === 'student' ? 'students' : 'blacklist'}/${sid}/face`, { method: 'POST', body: form });
+            }
+            return null;
+        })
+        .then(async res => {
+            if (res) {
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    throw new Error(data?.error || 'Failed to register face');
+                }
+                alert('Face registered successfully via live camera!');
+                if (target === 'student') await refreshStudents(); else await refreshBlacklist();
+                closeWebcam();
+            }
+        })
+        .catch(err => {
+            if (err.message.includes('Device in use') || err.message.includes('track')) {
+                alert('Camera is used by another process. Close other camera applications or use the server live camera page.');
+            } else {
+                alert('Camera capture failed: ' + err.message);
+            }
+        });
+}
+
+function closeWebcam() {
+    ['student', 'blacklist'].forEach(target => {
+        const wrapper = document.getElementById(target + '-camera-wrapper');
+        const captureBtn = document.getElementById(target + '-capture-btn');
+        const closeBtn = document.getElementById(target + '-close-btn');
+        const preview = document.getElementById(target + '-preview');
+        if (wrapper) wrapper.classList.add('d-none');
+        if (captureBtn) captureBtn.disabled = true;
+        if (closeBtn) closeBtn.style.display = 'none';
+        if (preview) preview.src = '';
+    });
+    webcamState.target = null;
+    webcamState.captureSid = null;
+    webcamState.capturedBlob = null;
+}
+
+function captureWebcamImage(target, sid = null) {
+    const preview = document.getElementById(target + '-preview');
+    if (!preview || !webcamState.capturedBlob) {
+        alert('No captured frame available. Click Open Camera first.');
+        return;
+    }
+
+    if (target === 'student') {
+        document.getElementById('f-image').files = new DataTransfer().files; // override manual upload
+    } else if (target === 'blacklist') {
+        document.getElementById('b-image').files = new DataTransfer().files;
+    }
+
+    if (sid || webcamState.captureSid) {
+        const faceSid = sid || webcamState.captureSid;
+        const form = new FormData();
+        form.append('image', webcamState.capturedBlob, 'capture.jpg');
+        fetch(`/api/${target === 'student' ? 'students' : 'blacklist'}/${faceSid}/face`, { method: 'POST', body: form })
+            .then(r => r.json())
+            .then(data => {
+                if (!data || data.error) throw new Error(data?.error || 'Failed to register face');
+                alert('Face registered successfully via camera!');
+                closeWebcam();
+                if (target === 'student') refreshStudents(); else refreshBlacklist();
+            }).catch(err => alert(err.message));
+    } else {
+        alert('Photo captured. You can now save the record to apply this face image.');
+    }
+}
+
 async function api(url) {
     const res = await fetch(url);
     if (!res.ok) throw new Error('API error');
@@ -106,12 +209,15 @@ async function refreshDashboard() {
         document.getElementById('stat-present').textContent = stats.present_today;
         document.getElementById('stat-alerts').textContent = stats.unacked_alerts;
         document.getElementById('stat-logs').textContent = stats.total_logs;
-        document.getElementById('recent-logs').innerHTML = logs.map(l =>
-            `<div class="log-item badge-${l.person_type}">
-                <strong>${l.person_type}</strong>${l.person_id ? ' &middot; ID ' + l.person_id : ''}
+        document.getElementById('recent-logs').innerHTML = logs.map(l => {
+            const personLabel = l.person_type === 'student' ? (l.student_name || l.person_id) :
+                l.person_type === 'blacklisted' ? (l.blacklist_name || l.person_id) : 'Unknown';
+            return `<div class="log-item badge-${l.person_type}">
+                <strong>${l.person_type}</strong> &middot; ${personLabel}
                 &middot; ${(l.confidence*100).toFixed(1)}%
                 <span class="float-end text-muted">${l.timestamp.split(' ')[1]}</span>
-            </div>`).join('');
+            </div>`;
+        }).join('');
         document.getElementById('today-attendance').innerHTML = att.length
             ? att.map(a => `<div class="log-item badge-student mb-1">
                 <strong>${a.name}</strong> (${a.roll_number})<br>
@@ -142,6 +248,17 @@ async function loadStudents() {
                     <div class="col-md-3"><input class="form-control" id="f-block" placeholder="Hostel Block"></div>
                     <div class="col-md-3"><input class="form-control" id="f-course" placeholder="Course"></div>
                     <div class="col-md-3"><input class="form-control" id="f-year" placeholder="Year" type="number"></div>
+                </div>
+                <div class="row g-2 mt-3">
+                    <div class="col-md-4"><input type="file" class="form-control" id="f-image" accept="image/*"></div>
+                    <div class="col-md-8">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="openWebcam('student')">Open Camera</button>
+                        <button class="btn btn-outline-secondary btn-sm ms-2" id="student-capture-btn" onclick="captureWebcamImage('student')" disabled>Capture Photo</button>
+                        <button class="btn btn-outline-danger btn-sm ms-2" id="student-close-btn" onclick="closeWebcam()" style="display:none">Close Camera</button>
+                    </div>
+                </div>
+                <div id="student-camera-wrapper" class="mt-3 d-none">
+                    <img id="student-preview" src="" width="320" height="240" style="border:1px solid #ccc;" />
                 </div>
                 <div class="mt-3">
                     <button class="btn btn-success btn-sm" onclick="submitStudent()">Save Student</button>
@@ -175,8 +292,29 @@ async function submitStudent() {
     };
     if (!data.roll_number || !data.name) { alert('Roll number and name required'); return; }
     const res = await fetch('/api/students', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-    if (res.ok) { document.getElementById('add-form').classList.add('d-none'); await refreshStudents(); }
-    else { const err = await res.json(); alert(err.error || 'Failed'); }
+    const result = await res.json();
+    if (!res.ok) { alert(result.error || 'Failed to add student'); return; }
+
+    const studentId = result.id;
+    const fileInput = document.getElementById('f-image');
+
+    if (fileInput.files.length || (webcamState.target === 'student' && webcamState.capturedBlob)) {
+        const formData = new FormData();
+        if (fileInput.files.length) {
+            formData.append('image', fileInput.files[0]);
+        } else {
+            formData.append('image', webcamState.capturedBlob, 'capture.jpg');
+        }
+        const uploadRes = await fetch('/api/students/' + studentId + '/face', { method: 'POST', body: formData });
+        if (!uploadRes.ok) {
+            const errorData = await uploadRes.json();
+            alert('Student added, but face registration failed: ' + (errorData.error || uploadRes.statusText));
+        }
+    }
+
+    document.getElementById('add-form').classList.add('d-none');
+    closeWebcam();
+    await refreshStudents();
 }
 
 async function refreshStudents() {
@@ -190,7 +328,8 @@ async function refreshStudents() {
                     <i class="fas fa-camera"></i>
                     <input type="file" accept="image/*" style="display:none" onchange="uploadFace(${s.id},this)">
                 </label>
-                <button class="btn btn-outline-danger btn-sm" onclick="deleteStudent(${s.id})"><i class="fas fa-trash"></i></button>
+                <button class="btn btn-outline-secondary btn-sm ms-1" title="Capture face with webcam" onclick="openWebcam('student', ${s.id})"><i class="fas fa-video"></i></button>
+                <button class="btn btn-outline-danger btn-sm ms-1" onclick="deleteStudent(${s.id})"><i class="fas fa-trash"></i></button>
             </td>
         </tr>`).join('');
 }
@@ -229,12 +368,18 @@ async function loadCamera() {
     setInterval(async () => {
         try {
             const logs = await api('/api/logs?limit=15');
-            document.getElementById('live-logs').innerHTML = logs.map(l =>
-                `<div class="log-item badge-${l.person_type} mb-1">
-                    <strong>${l.person_type}</strong>${l.person_id ? ' &middot; ID '+l.person_id : ''}
+            document.getElementById('live-logs').innerHTML = logs.map(l => {
+                const personLabel = l.person_type === 'student'
+                    ? (l.student_name || l.person_id || 'Unknown')
+                    : l.person_type === 'blacklisted'
+                        ? (l.blacklist_name || l.person_id || 'Unknown')
+                        : 'Unknown';
+                return `<div class="log-item badge-${l.person_type} mb-1">
+                    <strong>${l.person_type}</strong> &middot; ${personLabel}
                     &middot; ${(l.confidence*100).toFixed(1)}%
                     <div style="font-size:0.75rem" class="text-muted">${l.timestamp}</div>
-                </div>`).join('');
+                </div>`;
+            }).join('');
         } catch(e) {}
     }, 2000);
 }
@@ -255,13 +400,20 @@ async function loadAlerts() {
         </div>`;
     const alerts = await api('/api/alerts');
     document.getElementById('alerts-table').innerHTML = alerts.length
-        ? alerts.map(a => `<tr>
-            <td><small>${a.timestamp}</small></td>
-            <td><span class="badge ${a.alert_type==='blacklist'?'bg-danger':'bg-warning text-dark'}">${a.alert_type}</span></td>
-            <td>${a.person_id||'Unknown'}</td>
-            <td>${a.acknowledged?'<span class="badge bg-success">Acknowledged</span>':'<span class="badge bg-secondary">Pending</span>'}</td>
-            <td>${!a.acknowledged?'<button class="btn btn-sm btn-outline-success" onclick="ackAlert('+a.id+')">Acknowledge</button>':''}</td>
-          </tr>`).join('')
+        ? alerts.map(a => {
+            const personLabel = a.alert_type === 'student'
+                ? (a.student_name || a.person_id || 'Unknown')
+                : a.alert_type === 'blacklist'
+                    ? (a.blacklist_name || a.person_id || 'Unknown')
+                    : 'Unknown';
+            return `<tr>
+                <td><small>${a.timestamp}</small></td>
+                <td><span class="badge ${a.alert_type==='blacklist'?'bg-danger':'bg-warning text-dark'}">${a.alert_type}</span></td>
+                <td>${personLabel}</td>
+                <td>${a.acknowledged?'<span class="badge bg-success">Acknowledged</span>':'<span class="badge bg-secondary">Pending</span>'}</td>
+                <td>${!a.acknowledged?'<button class="btn btn-sm btn-outline-success" onclick="ackAlert('+a.id+')">Acknowledge</button>':''}</td>
+              </tr>`;
+        }).join('')
         : '<tr><td colspan="5" class="text-center text-muted py-4">No alerts</td></tr>';
 }
 
@@ -287,6 +439,16 @@ async function loadBlacklist() {
                     <div class="col-md-4"><input class="form-control" id="b-reason" placeholder="Reason"></div>
                     <div class="col-md-4"><input type="file" class="form-control" id="b-image" accept="image/*"></div>
                 </div>
+                <div class="row g-2 mt-3">
+                    <div class="col-md-12">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="openWebcam('blacklist')">Open Camera</button>
+                        <button class="btn btn-outline-secondary btn-sm ms-2" id="blacklist-capture-btn" onclick="captureWebcamImage('blacklist')" disabled>Capture Photo</button>
+                        <button class="btn btn-outline-danger btn-sm ms-2" id="blacklist-close-btn" onclick="closeWebcam()" style="display:none">Close Camera</button>
+                    </div>
+                </div>
+                <div id="blacklist-camera-wrapper" class="mt-3 d-none">
+                    <img id="blacklist-preview" src="" width="320" height="240" style="border:1px solid #ccc;" />
+                </div>
                 <div class="mt-3">
                     <button class="btn btn-success btn-sm" onclick="submitBlacklist()">Save</button>
                     <button class="btn btn-secondary btn-sm ms-2" onclick="document.getElementById('blacklist-form').classList.add('d-none')">Cancel</button>
@@ -310,17 +472,23 @@ async function submitBlacklist() {
     const name = document.getElementById('b-name').value;
     const reason = document.getElementById('b-reason').value;
     const imageInput = document.getElementById('b-image');
-    if (!name || !reason || !imageInput.files.length) { alert('Name, reason and photo required'); return; }
+    const captured = webcamState.target === 'blacklist' && webcamState.capturedBlob;
+    if (!name || !reason || (!imageInput.files.length && !captured)) { alert('Name, reason and photo required'); return; }
 
     const form = new FormData();
     form.append('name', name);
     form.append('reason', reason);
-    form.append('image', imageInput.files[0]);
+    if (imageInput.files.length) {
+        form.append('image', imageInput.files[0]);
+    } else {
+        form.append('image', captured, 'capture.jpg');
+    }
 
     const res = await fetch('/api/blacklist', { method:'POST', body: form });
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Failed to add blacklisted person'); return; }
     document.getElementById('blacklist-form').classList.add('d-none');
+    closeWebcam();
     await refreshBlacklist();
 }
 
@@ -333,7 +501,8 @@ async function refreshBlacklist() {
                 <td>${item.reason}</td>
                 <td>${new Date(item.created_at).toLocaleString()}</td>
                 <td>
-                    <button class="btn btn-outline-danger btn-sm" onclick="deleteBlacklist(${item.id})">Delete</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="openWebcam('blacklist', ${item.id})" title="Capture/Update face">📷</button>
+                    <button class="btn btn-outline-danger btn-sm ms-1" onclick="deleteBlacklist(${item.id})">Delete</button>
                 </td>
             </tr>`).join('')
         : '<tr><td colspan="4" class="text-center text-muted py-3">No blacklisted persons</td></tr>';

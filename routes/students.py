@@ -3,6 +3,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from flask import Blueprint, request, jsonify, session
 from db.db_manager import DatabaseManager
 from services.face_recognizer import FaceRecognizer
+import routes.camera as camera_route
 from functools import wraps
 
 students_bp = Blueprint('students', __name__)
@@ -51,6 +52,23 @@ def update_student(sid):
 @login_required
 def delete_student(sid):
     db.execute('UPDATE students SET is_active=0 WHERE id=?', (sid,))
+    db.execute('DELETE FROM face_embeddings WHERE person_type=? AND person_id=?', ('student', sid))
+
+    student_folder = os.path.join('data', 'known_faces', 'students', str(sid))
+    if os.path.isdir(student_folder):
+        try:
+            for root, dirs, files in os.walk(student_folder, topdown=False):
+                for f in files:
+                    os.remove(os.path.join(root, f))
+                for d in dirs:
+                    os.rmdir(os.path.join(root, d))
+            os.rmdir(student_folder)
+        except Exception:
+            pass
+
+    if camera_route.camera_service is not None:
+        camera_route.camera_service.reload_embeddings()
+
     return jsonify({'message': 'Student removed'})
 
 @students_bp.route('/api/students/<int:sid>/face', methods=['POST'])
@@ -67,6 +85,8 @@ def upload_face(sid):
         r = FaceRecognizer()
         db.execute('DELETE FROM face_embeddings WHERE person_type=? AND person_id=?', ('student', sid))
         r.add_face('student', sid, path)
+        if camera_route.camera_service is not None:
+            camera_route.camera_service.reload_embeddings()
         return jsonify({'message': 'Face registered successfully'})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400

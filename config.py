@@ -33,7 +33,7 @@ SMTP_PORT = 587
 SMTP_USER = os.environ.get('SMTP_USER')
 SMTP_PASS = os.environ.get('SMTP_PASS')
 
-WARDEN_EMAIL = os.environ.get('WARDEN_EMAIL', 'email add')
+WARDEN_EMAIL = os.environ.get('WARDEN_EMAIL', 'warden_email_here@gmail.com')
 
 # =========================
 # Twilio SMS (Optional)
@@ -43,7 +43,7 @@ TWILIO_TOKEN = os.environ.get('TWILIO_TOKEN')
 TWILIO_FROM = os.environ.get('TWILIO_FROM')
 
 # Must include country code (+91)
-WARDEN_PHONE = os.environ.get('WARDEN_PHONE', '# mobile number add')
+WARDEN_PHONE = os.environ.get('WARDEN_PHONE', '+91XXXXXXXXXX')
 
 SMS_GATEWAY_DOMAIN = os.environ.get('SMS_GATEWAY_DOMAIN')
 

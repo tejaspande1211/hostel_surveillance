@@ -17,13 +17,14 @@ SMTP_HOST = 'smtp.gmail.com'
 SMTP_PORT = 587
 SMTP_USER = os.environ.get('SMTP_USER', 'your_email@gmail.com')
 SMTP_PASS = os.environ.get('SMTP_PASS', 'your_app_password')
-WARDEN_EMAIL = os.environ.get('WARDEN_EMAIL', 'warden@hostel.com')
+WARDEN_EMAIL = os.environ.get('WARDEN_EMAIL', 'tejaspandesaoe@gmail.com')
 
 # Twilio SMS (optional)
 TWILIO_SID = os.environ.get('TWILIO_SID', '')
 TWILIO_TOKEN = os.environ.get('TWILIO_TOKEN', '')
 TWILIO_FROM = os.environ.get('TWILIO_FROM', '')
-WARDEN_PHONE = os.environ.get('WARDEN_PHONE', '')
+WARDEN_PHONE = os.environ.get('WARDEN_PHONE', '8600146090')
+SMS_GATEWAY_DOMAIN = os.environ.get('SMS_GATEWAY_DOMAIN', '')
 
 # File Paths
 KNOWN_FACES_DIR = 'data/known_faces'

@@ -32,3 +32,14 @@ def get_alerts():
 def acknowledge_alert(aid):
     db.execute('UPDATE alerts SET acknowledged=1 WHERE id=?', (aid,))
     return jsonify({'message': 'Alert acknowledged'})
+
+@alerts_bp.route('/api/alerts/ack-all', methods=['POST'])
+@login_required
+def acknowledge_all_alerts():
+    alert_type = request.args.get('type')
+    if alert_type:
+        db.execute('UPDATE alerts SET acknowledged=1 WHERE acknowledged=0 AND alert_type=?', (alert_type,))
+        return jsonify({'message': f'All {alert_type} alerts acknowledged'})
+
+    db.execute('UPDATE alerts SET acknowledged=1 WHERE acknowledged=0')
+    return jsonify({'message': 'All alerts acknowledged'})

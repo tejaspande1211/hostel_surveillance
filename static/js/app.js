@@ -389,7 +389,10 @@ async function loadAlerts() {
     if (!user) return;
     buildSidebar(user.role);
     document.getElementById('main-content').innerHTML = `
-        <h5 class="fw-bold mb-4">Security Alerts</h5>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="fw-bold mb-0">Security Alerts</h5>
+            <button class="btn btn-outline-success btn-sm" onclick="ackAllUnknownAlerts()">Acknowledge All Unknown</button>
+        </div>
         <div class="card border-0 shadow-sm">
             <div class="card-body p-0">
                 <table class="table table-hover mb-0">
@@ -419,6 +422,12 @@ async function loadAlerts() {
 
 async function ackAlert(id) {
     await fetch('/api/alerts/'+id+'/ack', { method:'POST' });
+    await loadAlerts();
+}
+
+async function ackAllUnknownAlerts() {
+    if (!confirm('Acknowledge all unknown alerts?')) return;
+    await fetch('/api/alerts/ack-all?type=unknown', { method:'POST' });
     await loadAlerts();
 }
 

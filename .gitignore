@@ -1,37 +1,74 @@
-﻿# Virtual environment
+﻿# =========================
+# Virtual Environment
+# =========================
 venv/
+env/
 
+# =========================
+# Environment Variables (SECRET)
+# =========================
+.env
+
+# =========================
 # Database (contains personal data)
-db/hostel.db
+# =========================
+db/*.db
 
-# Face images (personal data)
+# =========================
+# Image / Data Folders
+# =========================
+data/
+unknown_captures/
+alert_frames/
+
+# =========================
+# Face Images (extra safety)
+# =========================
 data/known_faces/
-data/unknown_captures/
-data/alert_frames/
 
-# DeepFace model weights
+# =========================
+# Deep Learning Model Files
+# =========================
 *.h5
+*.pt
+*.onnx
 
-# Python cache
+# =========================
+# Python Cache
+# =========================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 
-# Environment variables
-.env
+# =========================
+# Logs
+# =========================
+*.log
 
+# =========================
 # VS Code
+# =========================
 .vscode/
 
-# Write scripts (not needed by others)
-write_files.py
-write_routes.py
-write_frontend.py
-fix_all.py
-update_app.py
-
-# OS files
+# =========================
+# OS Files
+# =========================
 .DS_Store
 Thumbs.db
+
+# =========================
+# Temporary / Dev Scripts
+# =========================
+write_*.py
+fix_*.py
+update_*.py
+
+# =========================
+# Node (future React)
+# =========================
+node_modules/
+
+test_email.py
+test_sms.py

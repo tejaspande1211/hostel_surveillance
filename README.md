@@ -79,3 +79,9 @@ hostel_surveillance/
 ```
 Admin =  admin   and   admin123
 Warden = warden1   and NewWardenPass123
+
+## Security Note
+- .env file is not included in repo
+- Add your own credentials for:
+    - Email (SMTP)
+    - Twilio (SMS)
